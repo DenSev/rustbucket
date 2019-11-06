@@ -1,97 +1,35 @@
-use ::Sex::MALE;
-use std::env;
-use std::fmt::Display;
+use std::fs;
+use std::io::prelude::*;
+use std::net::{TcpListener, TcpStream};
 
 fn main() {
+    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
 
-    let args: Vec<String> = env::args().collect();
-    println!("{:?}", args);
-    let mut s = String::from("some words or whatever");
+    for stream in listener.incoming() {
+        let stream = stream.unwrap();
+        handle_connection(stream);
+        println!("Connection established!")
+    }
+}
 
-    let us = first_word(&mut s);
+fn handle_connection(mut stream: TcpStream) {
+    let mut buffer = [0; 512];
+    stream.read(&mut buffer).unwrap();
 
-    println!("{}", us);
+    println!("Request: {}", String::from_utf8_lossy(&buffer[..]));
 
-    let user = User {
-        name: String::from("denis"),
-        age: 27,
-        sex: MALE
+    let get = b"GET / HTTP/1.1\r\n";
+
+    let (status_line, filename) = if buffer.starts_with(get) {
+        ("HTTP/1.1 200 OK\r\n\r\n", "hello.html")
+    } else {
+        ("HTTP/1.1 404 NOT FOUND\r\n\r\n", "404.html")
     };
 
-    let is_adult = user.is_adult();
+    let contents = fs::read_to_string(filename).unwrap();
 
-    println!("{} is adult? {}", user.name, is_adult.to_string());
-    println!("{}", user);
+    let response = format!("{}{}", status_line, contents);
 
-    let number_list = vec![34, 50, 25, 100, 65];
-
-    println!("{}", largest(&number_list));
-}
-
-
-fn largest<T: PartialOrd>(list: &[T]) -> &T {
-    let mut largest = &list[0];
-
-    for item in list.iter() {
-        if item > largest {
-            largest = item;
-        }
-    }
-
-    largest
-}
-
-fn first_word(s: &String) -> usize {
-    let bytes = s.as_bytes();
-    let s2;
-    {
-        s2 = User::some_other_function();
-    }
-    println!("{}", s2);
-
-    for (i, &item) in bytes.iter().enumerate() {
-        if item == b' ' {
-            return i;
-        }
-    }
-
-    s2.len()
-}
-
-//#[derive(Debug)]
-enum Sex {
-    MALE,
-    FEMALE
-}
-
-impl Display for Sex {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match &self {
-            Sex::MALE => write!(f, "male"),
-            Sex::FEMALE => write!(f, "female")
-        }
-    }
-}
-
-//#[derive(Debug)]
-struct User {
-    name: String,
-    age: u32,
-    sex: Sex
-}
-
-impl User {
-    fn is_adult(&self) -> bool {
-        return self.age >= 18;
-    }
-
-    fn some_other_function<'a>() -> &'a str {
-        return "tutturu";
-    }
-}
-
-impl Display for User {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "name: {}\nage: {}\nsex: {}", &self.name, &self.age, &self.sex)
-    }
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
 }
